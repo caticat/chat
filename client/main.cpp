@@ -30,21 +30,10 @@ int main()
 		return 0;
 	}
 
-	char* buf = "aaaaaaa";
-	send(connectFd,buf,strlen(buf),0);
-
-	int msgLen = 0;
-	char msg[MAX_BUFF_SIZE];
-	while (1)
-	{
-		msgLen = recv(connectFd,msg,MAX_BUFF_SIZE,0);
-		if (msgLen > 0)
-		{
-			msg[msgLen] = '\0';
-			printf("%s\n",msg);
-			Sleep(1000);
-		}
-	}
+	char buff[MAX_BUFF_SIZE];
+	fgets(buff,MAX_BUFF_SIZE,stdin);
+	send(connectFd,buff,strlen(buff),0);
 	
+	system("pause");
 	return 0;
 }

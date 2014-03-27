@@ -4,17 +4,140 @@
 
 #pragma comment(lib,"ws2_32.lib")
 
+
 const int SERVER_PORT = 8888;
 const int MAX_BUFF_SIZE = 4096;
-const int MAX_USER = 10;
+const int MAX_USER = FD_SETSIZE;
+const int MAX_BACKLOG_SIZE = 3; // 等待连接队列的最大长度
 
-int users[MAX_USER];
+int g_userNum = 0;
+SOCKET g_users[MAX_USER];
+bool g_serveiceOn = true; // 程序服务是否开启
+
+
+int CALLBACK acceptCondition(LPWSABUF lpCallerId,LPWSABUF lpCallerData, LPQOS lpSQOS,LPQOS lpGQOS,LPWSABUF lpCalleeId, LPWSABUF lpCalleeData,GROUP FAR * g,DWORD dwCallbackData)
+{
+	if (g_userNum < MAX_USER)
+		return CF_ACCEPT;
+	return CF_REJECT;
+}
+
+// accept线程
+void acceptThd()
+{
+	printf("acceptThd start.\n");
+
+	WSADATA wsaData;
+	if (WSAStartup(0x0202,&wsaData) != NOERROR)
+	{
+		printf("WSAStartup error.\n");
+		abort();
+	}
+	printf("WSAStartup complete\n");
+
+	SOCKET listenFD;
+	listenFD = socket(AF_INET,SOCK_STREAM,IPPROTO_TCP);
+	printf("socket init complete\n");
+
+	sockaddr_in localAddr;
+	localAddr.sin_family = AF_INET;
+	localAddr.sin_addr.s_addr = htonl(INADDR_ANY);
+	localAddr.sin_port = htons(SERVER_PORT);
+	int addrSize = sizeof(sockaddr_in);
+	printf("addr init complete\n");
+
+	if (bind(listenFD,(sockaddr*)&localAddr,addrSize) != NOERROR)
+	{
+		printf("bind error:%d\n",WSAGetLastError());
+		abort();
+	}
+	printf("bind complete\n");
+
+	if (listen(listenFD,MAX_BACKLOG_SIZE) != NOERROR)
+	{
+		printf("listen error:%d\n",WSAGetLastError());
+		abort();
+	}
+	printf("listen complete\n");
+
+	SOCKET clientFD;
+	sockaddr_in clientAddr;
+	while (g_serveiceOn)
+	{
+		clientFD = WSAAccept(listenFD,(sockaddr*)&clientAddr,&addrSize,acceptCondition,0);
+		printf("accept client:%s:%d:%d\n",inet_ntoa(clientAddr.sin_addr),ntohs(clientAddr.sin_port),g_userNum);
+		g_users[g_userNum++] = clientFD;
+	}
+
+	printf("acceptThd end.\n");
+}
+
+// 工作线程
+void workThd()
+{
+	printf("workThd start.\n");
+
+	fd_set fdRead;
+	int i, ret;
+	timeval tv = {1,0};
+	char buff[MAX_BUFF_SIZE];
+
+	while (g_serveiceOn)
+	{
+		if (g_userNum == 0)
+		{
+			printf("service wait.\n");
+			Sleep(5000);
+			continue;
+		}
+
+		FD_ZERO(&fdRead);
+		for (i = 0; i < g_userNum; ++i)
+			FD_SET(g_users[i],&fdRead);
+
+		ret = select(0,&fdRead,NULL,NULL,&tv);
+		if (ret == 0)
+			continue;
+
+		for (i = 0; i < g_userNum; ++i)
+		{
+			if (FD_ISSET(g_users[i],&fdRead))
+			{
+				ret = recv(g_users[i],buff,MAX_BUFF_SIZE,0);
+				if ((ret == 0) || ((ret == SOCKET_ERROR) && (WSAGetLastError() == WSAECONNRESET)))
+				{
+					printf("client sock:%d closed\n",g_users[i]);
+					closesocket(g_users[i]);
+					if (i < g_userNum-1)
+						g_users[i--] = g_users[--g_userNum];
+					else
+						--g_userNum;
+				}
+				else
+				{
+					if (ret == MAX_BUFF_SIZE)
+						--ret;
+					buff[ret] = '\0';
+					printf("msg from sock:%d is:%s\n",g_users[i],buff);
+				}
+			}
+		}
+	}
+
+	printf("workThd end.\n");
+}
 
 int main()
 {
+	printf("server start.\n");
+
 	boost::thread tAccept(acceptThd);
 	boost::thread tWork(workThd);
 
+	tAccept.join();
+	tWork.join();
+
+	printf("server end.\n");
 	/*
 	printf("server start\n");
 
