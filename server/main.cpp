@@ -78,9 +78,12 @@ void workThd()
 	printf("workThd start.\n");
 
 	fd_set fdRead;
+	fd_set fdWrite;
 	int i, ret;
 	timeval tv = {1,0};
 	char buff[MAX_BUFF_SIZE];
+	char toBuff[MAX_BUFF_SIZE];
+	SOCKET toSock = 0;
 
 	while (g_serveiceOn)
 	{
@@ -92,13 +95,20 @@ void workThd()
 		}
 
 		FD_ZERO(&fdRead);
+		FD_ZERO(&fdWrite);
 		for (i = 0; i < g_userNum; ++i)
+		{
 			FD_SET(g_users[i],&fdRead);
+			FD_SET(g_users[i],&fdWrite);
+		}
+		memset(toBuff,0,MAX_BUFF_SIZE);
+		toSock = 0;
 
-		ret = select(0,&fdRead,NULL,NULL,&tv);
+		ret = select(0,&fdRead,&fdWrite,NULL,&tv);
 		if (ret == 0)
 			continue;
 
+		// 接受数据
 		for (i = 0; i < g_userNum; ++i)
 		{
 			if (FD_ISSET(g_users[i],&fdRead))
@@ -118,8 +128,20 @@ void workThd()
 					if (ret == MAX_BUFF_SIZE)
 						--ret;
 					buff[ret] = '\0';
+					strncpy(toBuff,buff,MAX_BUFF_SIZE);
+					toSock = g_users[i];
 					printf("msg from sock:%d is:%s\n",g_users[i],buff);
 				}
+			}
+		}
+
+		// 发送数据
+		for (i = 0; i < g_userNum; ++i)
+		{
+			if (strlen(toBuff) != 0) // 有信息则发送给客户端
+			{
+				if (FD_ISSET(g_users[i],&fdWrite) && (g_users[i] != toSock))
+					send(g_users[i],toBuff,strlen(toBuff),0);
 			}
 		}
 	}
