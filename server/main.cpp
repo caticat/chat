@@ -2,7 +2,10 @@
 #include <iostream>
 #include <boost/thread.hpp>
 
+#include "msg.h"
+
 #pragma comment(lib,"ws2_32.lib")
+#pragma comment(lib,"common.lib")
 
 
 const int SERVER_PORT = 8888;
@@ -152,6 +155,11 @@ void workThd()
 int main()
 {
 	printf("server start.\n");
+
+	CMsg msg;
+	printf("1:%d\n",msg.GetTitle());
+	msg.SetTitle(10);
+	printf("2:%d\n",msg.GetTitle());
 
 	boost::thread tAccept(acceptThd);
 	boost::thread tWork(workThd);
