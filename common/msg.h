@@ -4,6 +4,7 @@
 	msg for net data transfer
 
 	2014-03-28 file created. base utility added.
+	2014-03-31 change setdata to template. use title to adjust T type.
 */
 
 #include "define.h"
@@ -18,10 +19,16 @@ public:
 	void SetTitle(int title);
 
 	template <typename T>
-	void GetData(T& data);
+	void GetData(T& data)
+	{
+		memcpy(&data,m_buff+MSG_TITLE,sizeof(data));
+	}
 
 	template <typename T>
-	void SetData(T& data);
+	void SetData(T& data)
+	{
+		memcpy(m_buff+MSG_TITLE,&data,sizeof(data));
+	}
 
 private:
 	enum MSG_CONST {

@@ -18,15 +18,3 @@ void CMsg::SetTitle(int title)
 {
 	memcpy(m_buff,&title,sizeof(int));
 }
-
-template <typename T>
-void CMsg::GetData(T& data)
-{
-	memcpy(data,m_buff+MSG_TITLE,sizeof(data));
-}
-
-template <typename T>
-void CMsg::SetData(T& data)
-{
-	memcpy(m_buff+MSG_TITLE,data,sizeof(data));
-}

@@ -156,11 +156,6 @@ int main()
 {
 	printf("server start.\n");
 
-	CMsg msg;
-	printf("1:%d\n",msg.GetTitle());
-	msg.SetTitle(10);
-	printf("2:%d\n",msg.GetTitle());
-
 	boost::thread tAccept(acceptThd);
 	boost::thread tWork(workThd);
 
