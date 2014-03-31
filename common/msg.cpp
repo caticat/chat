@@ -1,7 +1,6 @@
 #include <string>
 
 #include "msg.h"
-#include "data.h"
 
 CMsg::CMsg() : m_pos(0)
 {
@@ -20,16 +19,14 @@ void CMsg::SetTitle(int title)
 	memcpy(m_buff,&title,sizeof(int));
 }
 
-void CMsg::GetData(CData* pData, int dataLen)
+template <typename T>
+void CMsg::GetData(T& data)
 {
-	if (pData == NULL)
-		return;
-	memcpy(pData,m_buff+MSG_TITLE,dataLen);
+	memcpy(data,m_buff+MSG_TITLE,sizeof(data));
 }
 
-void CMsg::SetData(CData* pData, int dataLen)
+template <typename T>
+void CMsg::SetData(T& data)
 {
-	if (pData == NULL)
-		return;
-	memcpy(m_buff+MSG_TITLE,pData,dataLen);
+	memcpy(m_buff+MSG_TITLE,data,sizeof(data));
 }

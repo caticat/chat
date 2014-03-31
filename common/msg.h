@@ -17,8 +17,11 @@ public:
 	int GetTitle();
 	void SetTitle(int title);
 
-	void GetData(CData* pData, int dataLen);
-	void SetData(CData* pData, int dataLen);
+	template <typename T>
+	void GetData(T& data);
+
+	template <typename T>
+	void SetData(T& data);
 
 private:
 	enum MSG_CONST {
