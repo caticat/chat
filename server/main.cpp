@@ -8,7 +8,7 @@
 #pragma comment(lib,"common.lib")
 
 
-const int SERVER_PORT = 8888;
+const int SERVER_PORT = 8889;
 const int MAX_BUFF_SIZE = 4096;
 const int MAX_USER = FD_SETSIZE;
 const int MAX_BACKLOG_SIZE = 3; // 等待连接队列的最大长度
@@ -97,54 +97,60 @@ void workThd()
 			continue;
 		}
 
+		printf("read & write sock data\n");
+		
 		FD_ZERO(&fdRead);
-		FD_ZERO(&fdWrite);
 		for (i = 0; i < g_userNum; ++i)
-		{
 			FD_SET(g_users[i],&fdRead);
-			FD_SET(g_users[i],&fdWrite);
-		}
 		memset(toBuff,0,MAX_BUFF_SIZE);
 		toSock = 0;
 
-		ret = select(0,&fdRead,&fdWrite,NULL,&tv);
-		if (ret == 0)
-			continue;
-
-		// 接受数据
-		for (i = 0; i < g_userNum; ++i)
+		//ret = select(0,&fdRead,&fdWrite,NULL,&tv); // 同时读写会导致一直读取，写入数据，返回的值判定不清楚
+		ret = select(0,&fdRead,NULL,NULL,&tv);
+		if (ret != 0)
 		{
-			if (FD_ISSET(g_users[i],&fdRead))
+			// 接受数据
+			for (i = 0; i < g_userNum; ++i)
 			{
-				ret = recv(g_users[i],buff,MAX_BUFF_SIZE,0);
-				if ((ret == 0) || ((ret == SOCKET_ERROR) && (WSAGetLastError() == WSAECONNRESET)))
+				if (FD_ISSET(g_users[i],&fdRead))
 				{
-					printf("client sock:%d closed\n",g_users[i]);
-					closesocket(g_users[i]);
-					if (i < g_userNum-1)
-						g_users[i--] = g_users[--g_userNum];
+					ret = recv(g_users[i],buff,MAX_BUFF_SIZE,0);
+					if ((ret == 0) || ((ret == SOCKET_ERROR) && (WSAGetLastError() == WSAECONNRESET)))
+					{
+						printf("client sock:%d closed\n",g_users[i]);
+						closesocket(g_users[i]);
+						if (i < g_userNum-1)
+							g_users[i--] = g_users[--g_userNum];
+						else
+							--g_userNum;
+					}
 					else
-						--g_userNum;
-				}
-				else
-				{
-					if (ret == MAX_BUFF_SIZE)
-						--ret;
-					buff[ret] = '\0';
-					strncpy(toBuff,buff,MAX_BUFF_SIZE);
-					toSock = g_users[i];
-					printf("msg from sock:%d is:%s\n",g_users[i],buff);
+					{
+						if (ret == MAX_BUFF_SIZE)
+							--ret;
+						buff[ret] = '\0';
+						strncpy(toBuff,buff,MAX_BUFF_SIZE);
+						toSock = g_users[i];
+						printf("msg from sock:%d is:%s\n",g_users[i],buff);
+					}
 				}
 			}
 		}
 
 		// 发送数据
-		for (i = 0; i < g_userNum; ++i)
+		if (strlen(toBuff) != 0) // 有信息则发送给客户端
 		{
-			if (strlen(toBuff) != 0) // 有信息则发送给客户端
+			FD_ZERO(&fdWrite);
+			for (i = 0; i < g_userNum; ++i)
+				FD_SET(g_users[i],&fdWrite);
+			ret = select(0,&fdRead,&fdWrite,NULL,&tv);
+			if (ret != 0)
 			{
-				if (FD_ISSET(g_users[i],&fdWrite) && (g_users[i] != toSock))
-					send(g_users[i],toBuff,strlen(toBuff),0);
+				for (i = 0; i < g_userNum; ++i)
+				{
+					if (FD_ISSET(g_users[i],&fdWrite) && (g_users[i] != toSock))
+						send(g_users[i],toBuff,strlen(toBuff),0);
+				}
 			}
 		}
 	}

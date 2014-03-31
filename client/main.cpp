@@ -5,7 +5,7 @@
 #pragma comment(lib,"ws2_32.lib")
 
 const char SERVER_IP[] = "127.0.0.1";
-const int SERVER_PORT = 8888;
+const int SERVER_PORT = 8889;
 const int MAX_BUFF_SIZE = 4096;
 
 SOCKET clientFd = 0;
