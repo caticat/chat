@@ -1,14 +1,20 @@
 #include <WinSock2.h>
 #include <iostream>
 #include <boost/thread.hpp>
+#include "QtGui/QApplication"
+#include "uimain.h"
 
 #include "msg.h"
 #include "protocol.h"
 #include "data.h"
 #include "define.h"
 #include "user.h"
+#include "cuser.h"
+#include <list>
 
 #pragma comment(lib,"ws2_32.lib")
+#pragma comment(lib,"QtCore4.lib")
+#pragma comment(lib,"QtGui4.lib")
 
 const char SERVER_IP[] = "127.0.0.1";
 const int SERVER_PORT = 8889;
@@ -16,7 +22,35 @@ const int MAX_BUFF_SIZE = 4096;
 const int WORK_INTERVAL = 500; // 工作间隔，500毫秒
 
 CUser client;
+char g_name[CONST_MAX_NAME_LEN];
 bool g_clientOn = true;
+UIMain* g_pUiMain; // 主界面
+std::list<CCUser> g_userList; // 角色列表
+
+void resLogin(CMsg& msg)
+{
+	g_pUiMain->resLogin();
+}
+
+void resNormalChat(CMsg& msg)
+{
+	CPReqNormalChat nchat;
+	INIT_CP(nchat);
+	msg.GetData(nchat);
+	printf("msg from server is:%s\n",nchat.chat);
+}
+
+void userLogin(CMsg& msg)
+{
+	CPResUserLogin userLogin;
+	INIT_CP(userLogin);
+	msg.GetData(userLogin);
+	printf("othersock:%d,name:%s\n",userLogin.sock,userLogin.name);
+	CCUser user;
+	user.m_sock = userLogin.sock;
+	strncpy(user.m_name,userLogin.name,CONST_MAX_NAME_LEN);
+	g_userList.push_back(user);
+}
 
 void readThd()
 {
@@ -45,17 +79,13 @@ void readThd()
 			if (ret == MAX_BUFF_SIZE)
 				--ret;
 			//buff[ret] = '\0';
+			printf("msglen:%d\n",ret);
 			memcpy(&msg,buff,ret);
 			//client.PushMsg(msg);
 
-			if (msg.GetTitle() == EPReq_NormalChat)
-			{
-				CPReqNormalChat nchat;
-				INIT_CP(nchat);
-				msg.GetData(nchat);
-				printf("msg from server is:%s\n",nchat.chat);
-			}
-
+			CTITLE_HUB(EPRes_Login,resLogin,msg);
+			CTITLE_HUB(EPReq_NormalChat,resNormalChat,msg);
+			CTITLE_HUB(EPRes_UserLogin,userLogin,msg);
 			//printf("msg from server:%s\n",buff);
 		}
 	}
@@ -85,31 +115,18 @@ void writeThd()
 	}
 }
 
-void workThd()
+void uiThd(int argc, char** argv)
 {
-	printf("workThd start.\n");
+	QApplication app(argc,argv);
 
-	int i = 0;
-	while (g_clientOn)
-	{
-		Sleep(WORK_INTERVAL); // 每0.5秒遍历一次
-		if (!client.IsEmpty())
-		{
-			CMsg msg = client.PopMsg();
-			if (msg.GetTitle() == EPReq_NormalChat)
-			{
-				CPReqNormalChat nchat;
-				INIT_CP(nchat);
-				msg.GetData(nchat);
-				printf("msg from server is:%s;\n",nchat.chat);
-			}
-		}
-	}
+	g_pUiMain = new UIMain;
+	g_pUiMain->show(); // 逻辑不能放在这里面，需要单独写一个函数
 
-	printf("workThd end.\n");
+	app.exec();
+	g_clientOn = false;
 }
 
-int main()
+int main(int argc, char** argv)
 {
 	printf("client startup\n");
 
@@ -131,11 +148,12 @@ int main()
 
 	boost::thread tRead(readThd);
 	boost::thread tWrite(writeThd);
-	//boost::thread tWork(workThd);
+	boost::thread tUi(boost::bind(&uiThd,argc,argv));
 
-	tRead.join();
-	tWrite.join();
-	//tWork.join();
+
+	// join
+	tUi.join();
+
 
 	printf("client shutdown\n");
 	return 0;

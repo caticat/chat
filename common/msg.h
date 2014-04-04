@@ -18,6 +18,8 @@ public:
 	int GetTitle();
 	void SetTitle(int title);
 
+	int GetLength() const { return m_length; }
+
 	template <typename T>
 	void GetData(T& data)
 	{
@@ -28,6 +30,7 @@ public:
 	void SetData(T& data)
 	{
 		memcpy(m_buff+MSG_TITLE,&data,sizeof(data));
+		m_length = MSG_TITLE+sizeof(data);
 	}
 
 private:
@@ -38,6 +41,6 @@ private:
 	};
 
 public:
-	int m_pos;
+	int m_length;
 	char m_buff[MSG_MAX_BUFF_SIZE];
 };

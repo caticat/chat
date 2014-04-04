@@ -2,7 +2,7 @@
 
 #include "msg.h"
 
-CMsg::CMsg() : m_pos(0)
+CMsg::CMsg() : m_length(0)
 {
 	memset(m_buff,0,MSG_MAX_BUFF_SIZE);
 }

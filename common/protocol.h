@@ -9,6 +9,7 @@
 enum EProtocol
 {
 	EPReq_Login,
+	EPRes_Login,
 	EPReq_NormalChat,
 	EPRes_NormalChat,
 	EPRes_UserList,

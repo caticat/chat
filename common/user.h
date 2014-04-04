@@ -9,6 +9,7 @@
 #include "define.h"
 #include "msg.h"
 #include <queue>
+#include <WinSock2.h>
 
 class DLL_API CUser
 {
@@ -34,7 +35,7 @@ public:
 		CMsg msg;
 		msg.SetTitle(title);
 		msg.SetData(data);
-		send(m_sock,(char*)&msg,sizeof(msg),0);
+		send(m_sock,(char*)&msg,msg.GetLength(),0);
 	}
 
 private:

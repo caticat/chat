@@ -3,7 +3,7 @@
 #include <boost/thread.hpp>
 
 #include "msg.h"
-#include "user.h"
+#include "suser.h"
 #include "protocol.h"
 #include "data.h"
 #include "define.h"
@@ -17,10 +17,10 @@ const int SERVER_PORT = 8889;
 const int MAX_BUFF_SIZE = 4096;
 const int MAX_USER = FD_SETSIZE;
 const int MAX_BACKLOG_SIZE = 3; // 等待连接队列的最大长度
-const int WORK_INTERVAL = 500; // 工作间隔，500毫秒
+const int WORK_INTERVAL = 200; // 工作间隔，200毫秒
 
 int g_userNum = 0;
-CUser g_users[MAX_USER];
+CSUser g_users[MAX_USER];
 bool g_serveiceOn = true; // 程序服务是否开启
 
 std::deque<CMsg> g_msg; // 对所有成员的广播消息队列
@@ -156,13 +156,41 @@ void readThd()
 				for (i = 0; i < g_userNum; ++i)
 				{
 					if (FD_ISSET(g_users[i].GetSock(),&fdWrite))
-						send(g_users[i].GetSock(),(char*)&msg,sizeof(msg),0);
+						send(g_users[i].GetSock(),(char*)&msg,msg.GetLength(),0);
+					printf("msglen:%d\n",msg.GetLength());
 				}
 			}
 		}
 	}
 
 	printf("readThd end.\n");
+}
+
+void reqLogin(CSUser& user, CMsg& msg)
+{
+	CPReqLogin login;
+	INIT_CP(login);
+	msg.GetData(login);
+	strncpy(user.m_name,login.name,CONST_MAX_NAME_LEN);
+	user.Send(EPRes_Login,NULL);
+
+	CPResUserLogin userLogin;
+	INIT_CP(userLogin);
+	userLogin.sock = user.GetSock();
+	strncpy(userLogin.name,login.name,CONST_MAX_NAME_LEN);
+	CMsg loginMsg;
+	loginMsg.SetTitle(EPRes_UserLogin);
+	loginMsg.SetData(userLogin);
+	g_msg.push_back(loginMsg);
+}
+
+void reqNormalChat(CSUser& user, CMsg& msg)
+{
+	CPReqNormalChat nchat;
+	INIT_CP(nchat);
+	msg.GetData(nchat);
+	g_msg.push_back(msg);
+	printf("msg from %d is:%s\n",user.GetSock(),nchat.chat);
 }
 
 void wordThd()
@@ -172,20 +200,14 @@ void wordThd()
 	int i = 0;
 	while (g_serveiceOn)
 	{
-		Sleep(WORK_INTERVAL); // 每0.5秒遍历一次
+		Sleep(WORK_INTERVAL);
 		for (i = 0; i < g_userNum; ++i)
 		{
-			if (!g_users[i].IsEmpty())
+			while (!g_users[i].IsEmpty())
 			{
 				CMsg msg = g_users[i].PopMsg();
-				if (msg.GetTitle() == EPReq_NormalChat)
-				{
-					CPReqNormalChat nchat;
-					INIT_CP(nchat);
-					msg.GetData(nchat);
-					g_msg.push_back(msg);
-					printf("msg from client is:%s;\n",nchat.chat);
-				}
+				STITLE_HUB(EPReq_Login,reqLogin,g_users[i],msg);
+				STITLE_HUB(EPReq_NormalChat,reqNormalChat,g_users[i],msg);
 			}
 		}
 	}
