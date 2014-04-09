@@ -20,14 +20,8 @@ struct CPReqNormalChat
 
 struct CPResNormalChat
 {
-	char name[CONST_MAX_NAME_LEN];
+	int sock;
 	char chat[CONST_MAX_CHAT_LEN];
-};
-
-struct CPResUserList
-{
-	int userSize;
-	char name[CONST_MAX_USER_NUM][CONST_MAX_NAME_LEN];
 };
 
 struct CPResUserLogin
@@ -36,8 +30,26 @@ struct CPResUserLogin
 	char name[CONST_MAX_NAME_LEN];
 };
 
+struct CPResUserList
+{
+	int userSize;
+	CPResUserLogin user[CONST_MAX_USER_NUM];
+};
+
 struct CPResUserLogout
 {
 	int sock;
+};
+
+struct CPReqWisper
+{
+	int sock;
+	char chat[CONST_MAX_CHAT_LEN];
+};
+
+struct CPResWisper
+{
+	int sock;
+	char chat[CONST_MAX_CHAT_LEN];
 };
 

@@ -24,7 +24,9 @@ CSUser g_users[MAX_USER];
 bool g_serveiceOn = true; // 程序服务是否开启
 
 std::deque<CMsg> g_msg; // 对所有成员的广播消息队列
+boost::mutex g_msgMutex; // 对所有成员的广播消息队列 互斥量
 
+void reqLogout(CSUser& user, CMsg& msg);
 
 int CALLBACK acceptCondition(LPWSABUF lpCallerId,LPWSABUF lpCallerData, LPQOS lpSQOS,LPQOS lpGQOS,LPWSABUF lpCalleeId, LPWSABUF lpCalleeData,GROUP FAR * g,DWORD dwCallbackData)
 {
@@ -99,7 +101,7 @@ void readThd()
 	{
 		if (g_userNum == 0)
 		{
-			printf("service wait.\n");
+			//printf("service wait.\n");
 			Sleep(5000);
 			continue;
 		}
@@ -123,11 +125,14 @@ void readThd()
 					if ((ret == 0) || ((ret == SOCKET_ERROR) && (WSAGetLastError() == WSAECONNRESET)))
 					{
 						printf("client sock:%d closed\n",g_users[i].GetSock());
+						CSUser userTmp = g_users[i];
 						closesocket(g_users[i].GetSock());
 						if (i < g_userNum-1)
 							g_users[i--] = g_users[--g_userNum];
 						else
 							--g_userNum;
+						CMsg msg;
+						reqLogout(userTmp,msg);
 					}
 					else
 					{
@@ -143,21 +148,24 @@ void readThd()
 		}
 
 		// 发送数据
-		if (!g_msg.empty()) // 有信息则发送给客户端
 		{
-			msg = g_msg.front();
-			g_msg.pop_front();
-			FD_ZERO(&fdWrite);
-			for (i = 0; i < g_userNum; ++i)
-				FD_SET(g_users[i].GetSock(),&fdWrite);
-			ret = select(0,NULL,&fdWrite,NULL,&tv);
-			if (ret != 0)
+			boost::mutex::scoped_lock lock(g_msgMutex);
+			if (!g_msg.empty()) // 有信息则发送给客户端
 			{
+				msg = g_msg.front();
+				g_msg.pop_front();
+				FD_ZERO(&fdWrite);
 				for (i = 0; i < g_userNum; ++i)
+					FD_SET(g_users[i].GetSock(),&fdWrite);
+				ret = select(0,NULL,&fdWrite,NULL,&tv);
+				if (ret != 0)
 				{
-					if (FD_ISSET(g_users[i].GetSock(),&fdWrite))
-						send(g_users[i].GetSock(),(char*)&msg,msg.GetLength(),0);
-					printf("msglen:%d\n",msg.GetLength());
+					for (i = 0; i < g_userNum; ++i)
+					{
+						if (FD_ISSET(g_users[i].GetSock(),&fdWrite))
+							send(g_users[i].GetSock(),(char*)&msg,msg.GetLength(),0);
+						printf("msglen:%d\n",msg.GetLength());
+					}
 				}
 			}
 		}
@@ -166,22 +174,49 @@ void readThd()
 	printf("readThd end.\n");
 }
 
+CSUser* getUser(int sock)
+{
+	for (int i = 0; i < g_userNum; ++i)
+	{
+		if (g_users[i].GetSock() == sock)
+			return &g_users[i];
+	}
+	return NULL;
+}
+
 void reqLogin(CSUser& user, CMsg& msg)
 {
 	CPReqLogin login;
 	INIT_CP(login);
 	msg.GetData(login);
-	strncpy(user.m_name,login.name,CONST_MAX_NAME_LEN);
+	strcpy_s(user.m_name,CONST_MAX_NAME_LEN,login.name);
 	user.Send(EPRes_Login,NULL);
+
+	CPResUserList uList;
+	INIT_CP(uList);
+	CPResUserLogin userTmp;
+	for (int i = 0; (i < g_userNum) && (i < CONST_MAX_USER_NUM); ++i)
+	{
+		if (g_users[i].GetSock() == user.GetSock())
+			continue;
+		++uList.userSize;
+		userTmp.sock = g_users[i].GetSock();
+		strcpy_s(userTmp.name,CONST_MAX_NAME_LEN,g_users[i].m_name);
+		uList.user[i] = userTmp;
+	}
+	user.Send(EPRes_UserList,uList);
 
 	CPResUserLogin userLogin;
 	INIT_CP(userLogin);
 	userLogin.sock = user.GetSock();
-	strncpy(userLogin.name,login.name,CONST_MAX_NAME_LEN);
+	strcpy_s(userLogin.name,CONST_MAX_NAME_LEN,login.name);
 	CMsg loginMsg;
 	loginMsg.SetTitle(EPRes_UserLogin);
 	loginMsg.SetData(userLogin);
-	g_msg.push_back(loginMsg);
+	{
+		boost::mutex::scoped_lock lock(g_msgMutex);
+		g_msg.push_back(loginMsg);
+	}
 }
 
 void reqNormalChat(CSUser& user, CMsg& msg)
@@ -189,8 +224,42 @@ void reqNormalChat(CSUser& user, CMsg& msg)
 	CPReqNormalChat nchat;
 	INIT_CP(nchat);
 	msg.GetData(nchat);
-	g_msg.push_back(msg);
+	CPResNormalChat schat;
+	schat.sock = user.GetSock();
+	msg.SetTitle(EPRes_NormalChat);
+	strcpy_s(schat.chat,CONST_MAX_CHAT_LEN,nchat.chat);
+	msg.SetData(schat);
+	{
+		boost::mutex::scoped_lock lock(g_msgMutex);
+		g_msg.push_back(msg);
+	}
 	printf("msg from %d is:%s\n",user.GetSock(),nchat.chat);
+}
+
+void reqLogout(CSUser& user, CMsg& msg)
+{
+	msg.SetTitle(EPRes_UserLogout);
+	CPResUserLogout uLogout;
+	uLogout.sock = user.GetSock();
+	msg.SetData(uLogout);
+	{
+		boost::mutex::scoped_lock lock(g_msgMutex);
+		g_msg.push_back(msg);
+	}
+}
+
+void reqWisper(CSUser& user, CMsg& msg)
+{
+	CPReqWisper qWisper;
+	INIT_CP(qWisper);
+	msg.GetData(qWisper);
+	CPResWisper sWisper;
+	sWisper.sock = user.GetSock();
+	strcpy_s(sWisper.chat,CONST_MAX_CHAT_LEN,qWisper.chat);
+	CSUser* toUser = getUser(qWisper.sock);
+	if (toUser == NULL)
+		return;
+	toUser->Send(EPRes_Wisper,sWisper);
 }
 
 void wordThd()
@@ -208,6 +277,8 @@ void wordThd()
 				CMsg msg = g_users[i].PopMsg();
 				STITLE_HUB(EPReq_Login,reqLogin,g_users[i],msg);
 				STITLE_HUB(EPReq_NormalChat,reqNormalChat,g_users[i],msg);
+				STITLE_HUB(EPReq_Logout,reqLogout,g_users[i],msg);
+				STITLE_HUB(EPReq_Wisper,reqWisper,g_users[i],msg);
 			}
 		}
 	}

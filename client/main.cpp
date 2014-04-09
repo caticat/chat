@@ -26,10 +26,41 @@ char g_name[CONST_MAX_NAME_LEN];
 bool g_clientOn = true;
 UIMain* g_pUiMain; // 主界面
 std::list<CCUser> g_userList; // 角色列表
+boost::mutex g_userListMutex; // 角色列表 互斥量
+
+// 获取玩家名字
+void GetNameBySock(int sock, char* name)
+{
+	if (name == NULL)
+		return;
+	boost::mutex::scoped_lock lock(g_userListMutex);
+	for (std::list<CCUser>::iterator it = g_userList.begin(); it != g_userList.end(); ++it)
+	{
+		if (it->m_sock == sock)
+		{
+			strcpy_s(name,CONST_MAX_NAME_LEN,it->m_name);
+			return;
+		}
+	}
+}
+
+// 获取玩家Sock
+int GetSockByName(char* name)
+{
+	if (name == NULL)
+		return 0;
+	boost::mutex::scoped_lock lock(g_userListMutex);
+	for (std::list<CCUser>::iterator it = g_userList.begin(); it != g_userList.end(); ++it)
+	{
+		if (strcmp(it->m_name,name) == 0)
+			return it->m_sock;
+	}
+	return 0;
+}
 
 void resLogin(CMsg& msg)
 {
-	g_pUiMain->resLogin();
+	//g_pUiMain->resLogin();
 }
 
 void resNormalChat(CMsg& msg)
@@ -48,8 +79,12 @@ void userLogin(CMsg& msg)
 	printf("othersock:%d,name:%s\n",userLogin.sock,userLogin.name);
 	CCUser user;
 	user.m_sock = userLogin.sock;
-	strncpy(user.m_name,userLogin.name,CONST_MAX_NAME_LEN);
-	g_userList.push_back(user);
+	strcpy_s(user.m_name,CONST_MAX_NAME_LEN,userLogin.name);
+	{
+		boost::mutex::scoped_lock lock(g_userListMutex);
+		g_userList.push_back(user);
+	}
+	g_pUiMain->AddUser(user);
 }
 
 void readThd()
@@ -81,11 +116,11 @@ void readThd()
 			//buff[ret] = '\0';
 			printf("msglen:%d\n",ret);
 			memcpy(&msg,buff,ret);
-			//client.PushMsg(msg);
+			client.PushMsg(msg);
 
-			CTITLE_HUB(EPRes_Login,resLogin,msg);
-			CTITLE_HUB(EPReq_NormalChat,resNormalChat,msg);
-			CTITLE_HUB(EPRes_UserLogin,userLogin,msg);
+			//CTITLE_HUB(EPRes_Login,resLogin,msg);
+			//CTITLE_HUB(EPReq_NormalChat,resNormalChat,msg);
+			//CTITLE_HUB(EPRes_UserLogin,userLogin,msg);
 			//printf("msg from server:%s\n",buff);
 		}
 	}
@@ -110,7 +145,7 @@ void writeThd()
 		//send(clientFd,buff,MAX_BUFF_SIZE,0);
 		CPReqNormalChat nchat;
 		INIT_CP(nchat);
-		strncpy(nchat.chat,buff,strlen(buff));
+		strcpy_s(nchat.chat,strlen(buff),buff);
 		client.Send(EPReq_NormalChat,nchat);
 	}
 }
@@ -154,6 +189,8 @@ int main(int argc, char** argv)
 	// join
 	tUi.join();
 
+	if (g_clientOn)
+		client.Send(EPReq_Logout,NULL);
 
 	printf("client shutdown\n");
 	return 0;
