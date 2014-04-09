@@ -11,13 +11,14 @@
 #include "user.h"
 #include "cuser.h"
 #include <list>
+#include <fstream>
 
 #pragma comment(lib,"ws2_32.lib")
 #pragma comment(lib,"QtCore4.lib")
 #pragma comment(lib,"QtGui4.lib")
 
-const char SERVER_IP[] = "127.0.0.1";
-const int SERVER_PORT = 8889;
+static char SERVER_IP[12]; // = "127.0.0.1";
+static int SERVER_PORT; // = 8889;
 const int MAX_BUFF_SIZE = 4096;
 const int WORK_INTERVAL = 500; // 工作间隔，500毫秒
 
@@ -164,6 +165,33 @@ void uiThd(int argc, char** argv)
 int main(int argc, char** argv)
 {
 	printf("client startup\n");
+
+	// 加载配置文件
+	std::ifstream inFile("config");
+	if (inFile.fail())
+	{
+		printf("open config failed.\n");
+		return 0;
+	}
+	char config[128];
+	std::string tmpStr;
+	while (inFile.getline(config,sizeof(config)))
+	{
+		if (strstr(config,"port") != NULL)
+		{
+			tmpStr = config;
+			tmpStr = tmpStr.substr(5);
+			SERVER_PORT = atoi(tmpStr.c_str());
+			//std::cout << "line:" << SERVER_PORT << std::endl;
+		}
+		else if (strstr(config,"host") != NULL)
+		{
+			tmpStr = config;
+			tmpStr = tmpStr.substr(5);
+			strcpy_s(SERVER_IP,sizeof(SERVER_IP),tmpStr.c_str());
+			//std::cout << "line:" << SERVER_PORT << std::endl;
+		}
+	}
 
 	WSADATA wsaData;
 	WSAStartup(0x0202,&wsaData);

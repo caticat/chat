@@ -1,5 +1,6 @@
 #include <WinSock2.h>
 #include <iostream>
+#include <fstream>
 #include <boost/thread.hpp>
 
 #include "msg.h"
@@ -13,7 +14,7 @@
 #pragma comment(lib,"common.lib")
 
 
-const int SERVER_PORT = 8889;
+static int SERVER_PORT; // = 8889;
 const int MAX_BUFF_SIZE = 4096;
 const int MAX_USER = FD_SETSIZE;
 const int MAX_BACKLOG_SIZE = 3; // 等待连接队列的最大长度
@@ -289,6 +290,26 @@ void wordThd()
 int main()
 {
 	printf("server start.\n");
+
+	// 加载配置文件
+	std::ifstream inFile("config");
+	if (inFile.fail())
+	{
+		printf("open config failed.\n");
+		return 0;
+	}
+	char config[128];
+	std::string tmpStr;
+	while (inFile.getline(config,sizeof(config)))
+	{
+		if (strstr(config,"port") != NULL)
+		{
+			tmpStr = config;
+			tmpStr = tmpStr.substr(5);
+			SERVER_PORT = atoi(tmpStr.c_str());
+			//std::cout << "line:" << SERVER_PORT << std::endl;
+		}
+	}
 
 	boost::thread tAccept(acceptThd);
 	boost::thread tRead(readThd);
